@@ -13,79 +13,6 @@ def make_variable(tensor, volatile=False):
         tensor = tensor.cuda()
     return Variable(tensor, volatile=volatile)
 
-def ssl(
-    model,
-    device,
-    dataloader,
-    criterion,
-    optimizer,
-    lr_scheduler=None,
-    epoch=0,
-    args=None,
-):
-    print(
-        " ->->->->->->->->->-> One epoch with self-supervised training <-<-<-<-<-<-<-<-<-<-"
-    )
-
-    batch_time = AverageMeter("Time", ":6.3f")
-    data_time = AverageMeter("Data", ":6.3f")
-    losses = AverageMeter("Loss", ":.4f")
-    progress = ProgressMeter(
-        len(dataloader),
-        [batch_time, data_time, losses],
-        prefix="Epoch: [{}]".format(epoch),
-    )
-
-    model.train()
-    end = time.time()
-
-    for i, data in enumerate(dataloader):
-        images = data#.cuda()
-        # print(images[0].shape)
-        # print(images[1].shape)
-        images = torch.cat([images[0], images[1]], dim=0).cuda()
-        bsz = images.shape[0]//2
-        # basic properties of training
-        if i == 0:
-            print(
-                images.shape,
-                f"Batch_size from args: {args.batch_size}",
-                "lr: {:.5f}".format(optimizer.param_groups[0]["lr"]),
-            )
-            print(
-                "Pixel range for training images : [{}, {}]".format(
-                    torch.min(images).data.cpu().numpy(),
-                    torch.max(images).data.cpu().numpy(),
-                )
-            )
-
-        features = model(images)
-        f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-        features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-        if args.training_mode == "SupCon":
-            loss = criterion(features, target)
-        elif args.training_mode == "SimCLR":
-            loss = criterion(features)
-        else:
-            raise ValueError("training mode not supported")
-
-        losses.update(loss.item(), bsz)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        if lr_scheduler:
-            lr_scheduler.step()
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0:
-            progress.display(i)
-
-
-
 
 
 def ssl_with_CMA(
@@ -327,13 +254,13 @@ def ssl_with_CMA_CRA(
     for i, data in enumerate(dataloader):
         images, caps = data#.cuda()
         
-        # gmm = GMM(n_components=2).fit(caps)
-        # center = gmm.means_
-        # # label = gmm.predict_proba(caps)
-        # label = gmm.predict(caps)
-        # l = label.shape[0]
-        # label = np.array(list(label) * l ).reshape(l,l)
-        # mask = torch.FloatTensor( (label == label.T) * 1 )
+        gmm = GMM(n_components=2).fit(caps)
+        center = gmm.means_
+        # label = gmm.predict_proba(caps)
+        label = gmm.predict(caps)
+        l = label.shape[0]
+        label = np.array(list(label) * l ).reshape(l,l)
+        mask = torch.FloatTensor( (label == label.T) * 1 )
 
         images = torch.cat([images[0], images[1]], dim=0).cuda()
         # caps = torch.cat([caps[0], caps[1]], dim=0).cuda()
@@ -344,19 +271,7 @@ def ssl_with_CMA_CRA(
         bsz = images.shape[0]//2
         image_single = images[:bsz]
 
-        # basic properties of training
-        # if i == 0:
-        #     print(
-        #         images.shape,
-        #         f"Batch_size from args: {args.batch_size}",
-        #         "lr: {:.5f}".format(optimizer.param_groups[0]["lr"]),
-        #     )
-        #     print(
-        #         "Pixel range for training images : [{}, {}]".format(
-        #             torch.min(images).data.cpu().numpy(),
-        #             torch.max(images).data.cpu().numpy(),
-        #         )
-        #     )
+
         model.train()
         textmodel.train()
         features = model(images)
@@ -368,12 +283,6 @@ def ssl_with_CMA_CRA(
         # print("1",loss)
 
         cap_features = textmodel(caps)
-        # f1 = torch.nn.functional.normalize(f1,dim=1)
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # features_cross = torch.cat([f1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
-        # f1 = F.normalize(f1, dim=1)
-        # cap_features = F.normalize(cap_features, dim=1)
-        # loss_cross = criterion_MSE(f1, cap_features)
         features = torch.cat([f1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
         loss_cross = criterion(features)
         # print("A:",loss)
@@ -392,39 +301,6 @@ def ssl_with_CMA_CRA(
         if i % args.print_freq == 0:
             progress.display(i)
 
-
-
-        # textmodel.train(), model.train()
-        # cap_features = textmodel(caps)
-        # f1 = model(image_single)
-        # # f1 = torch.nn.functional.normalize(f1,dim=1)
-        # # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # # features_cross = torch.cat([f1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
-        # f1 = F.normalize(f1, dim=1)
-        # cap_features = F.normalize(cap_features, dim=1)
-
-        # loss_cross = criterion_CL(f1, cap_features)
-        # optimizer_cross.zero_grad()
-        # loss_cross.backward(retain_graph=True)
-        # optimizer_cross.step()
-        # cap_features = textmodel(caps)
-        # # f1_cap, f2_cap = torch.split(cap_features, [bsz, bsz], dim=0)
-
-        # If1 = torch.nn.functional.normalize(f1.clone().detach(),dim=1)
-        # If2 = torch.nn.functional.normalize(f2.clone().detach(),dim=1)
- 
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # cap_features = torch.cat([f1_cap.unsqueeze(1), f2_cap.unsqueeze(1)], dim=1)
-
-        # loss_cross_1 = criterion_MSE(If1,cap_features)
-        # loss_cross_2 = criterion_MSE(If2,cap_features)
-        # loss_cross = loss_cross_1 + loss_cross_2
-        # optimizer_text.zero_grad()
-        # loss_cross.backward(retain_graph=True)
-        # optimizer_text.step()
-        # if lr_scheduler:
-        #     lr_scheduler.step()
-
         
 
         ###generate samples ###
@@ -435,22 +311,11 @@ def ssl_with_CMA_CRA(
         with torch.no_grad():
             features = model(image_single)
             cap_features = textmodel(caps)
-        # print(cap_features.shape)
-        # print(features.shape)
-        # features = torch.nn.functional.normalize(features,dim=1)
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-        # features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-        # print(features.shape)
-        # print(cap_features.shape)
             z_i = F.normalize(features, dim=1)
             z_j = F.normalize(cap_features, dim=1)
-        # representations = torch.cat([z_i, z_j], dim=0)
-        # cor_matrix = F.cosine_similarity(z_i.unsqueeze(1), z_j.unsqueeze(0), dim=2)
-        # cor_matrix = F.cosine_similarity(z_i, z_j, dim=1)
             cor_matrix = torch.abs(torch.mm( z_j, z_i.t() ))
-            cor_matrix = cor_matrix - torch.diag( torch.diag(cor_matrix) ) + 10 * torch.eye(cor_matrix.shape[0]).cuda()
-            # cor_matrix = torch.mul(mask.cuda(), cor_matrix)
+            cor_matrix = cor_matrix - torch.diag( torch.diag(cor_matrix) ) + 1 * torch.eye(cor_matrix.shape[0]).cuda()
+            cor_matrix = torch.mul(mask.cuda(), cor_matrix)
 
             # cor_matrix = nn.Softmax(cor_matrix,dim=1)
             cor_matrix = cor_matrix / torch.sum(cor_matrix,dim=1)
@@ -499,156 +364,3 @@ def ssl_with_CMA_CRA(
 
 
 
-def ssl_with_text(
-    textmodel,
-    model,
-    device,
-    dataloader,
-    criterion,
-    criterion_MSE,
-    criterion_CL,
-    optimizer,
-    optimizer_text,
-    optimizer_cross,
-    lr_scheduler=None,
-    lr_scheduler_cross=None,
-    epoch=0,
-    args=None,
-):
-    print(
-        " ->->->->->->->->->-> One epoch with self-supervised training <-<-<-<-<-<-<-<-<-<-"
-    )
-
-    batch_time = AverageMeter("Time", ":6.3f")
-    data_time = AverageMeter("Data", ":6.3f")
-    losses = AverageMeter("Loss", ":.4f")
-    progress = ProgressMeter(
-        len(dataloader),
-        [batch_time, data_time, losses],
-        prefix="Epoch: [{}]".format(epoch),
-    )
-
-    model.train()
-    textmodel.train()
-    end = time.time()
-
-    for i, data in enumerate(dataloader):
-        caps = data#.cuda()
-
-
-        # print(images[0].shape)
-        # print(images[1].shape)
-        cap_single = caps[0].cuda()
-        caps = torch.cat([caps[0], caps[1]], dim=0).cuda()
-        # caps = torch.cat([caps[0], caps[1]], dim=0).cuda()
-        caps = caps.cuda()
-        bsz = caps.shape[0]//2
-        # basic properties of training
-        if i == 0:
-            print(
-                caps.shape,
-                f"Batch_size from args: {args.batch_size}",
-                "lr: {:.5f}".format(optimizer.param_groups[0]["lr"]),
-            )
-            print(
-                "Pixel range for training images : [{}, {}]".format(
-                    torch.min(caps).data.cpu().numpy(),
-                    torch.max(caps).data.cpu().numpy(),
-                )
-            )
-
-        features = textmodel(caps)
-        f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-        features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-        
-        loss = criterion(features)
-        losses.update(loss.item(), bsz)
-        # print("1",loss)
-
-
-        # single_features = torch.nn.functional.normalize(single_features,dim=1)
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # features_cross = torch.cat([If1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
-
-        optimizer_text.zero_grad()
-        loss.backward(retain_graph=True)
-        optimizer_text.step()
-        if lr_scheduler:
-            lr_scheduler.step()
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0:
-            progress.display(i)
-
-
-
-        # textmodel.train()
-        # cap_features = textmodel(caps)
-        # # f1_cap, f2_cap = torch.split(cap_features, [bsz, bsz], dim=0)
-
-        # If1 = torch.nn.functional.normalize(f1.clone().detach(),dim=1)
-        # If2 = torch.nn.functional.normalize(f2.clone().detach(),dim=1)
- 
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # cap_features = torch.cat([f1_cap.unsqueeze(1), f2_cap.unsqueeze(1)], dim=1)
-
-        # loss_cross_1 = criterion_MSE(If1,cap_features)
-        # loss_cross_2 = criterion_MSE(If2,cap_features)
-        # loss_cross = loss_cross_1 + loss_cross_2
-        # optimizer_text.zero_grad()
-        # loss_cross.backward(retain_graph=True)
-        # optimizer_text.step()
-        # if lr_scheduler:
-        #     lr_scheduler.step()
-
-        
-
-        ###generate samples ###
-        ###generate samples ###
-        ###generate samples ###
-
-
-        # model.eval(),textmodel.eval()
-        # features = model(image_single)
-        # cap_features = textmodel(caps)
-        # # print(cap_features.shape)
-        # # print(features.shape)
-        # features = torch.nn.functional.normalize(features,dim=1)
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-        # # features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-        # # print(features.shape)
-        # # print(cap_features.shape)
-        # cor_matrix = torch.mm( cap_features, features.t() )
-        # cor_matrix = cor_matrix / torch.sum(cor_matrix,dim=1)
-        # generated_batch = []
-        # for cap_i in cor_matrix:
-        #     generate_img = torch.zeros(images[0].shape).cuda()
-        #     for imgid, cap_w in enumerate(cap_i):
-        #         generate_img += cap_w * image_single[imgid]
-        #     generated_batch.append(generate_img)
-        # # print(len(generated_batch))
-
-        # model.train(),textmodel.eval()
-        # # generated_batch = torch.tensor([item.cpu().detach().numpy() for item in generated_batch]).cuda() 
-
-        # images_ = Generated_image(generated_batch, bsz, size = args.size )
-        # for images in images_:
-        #     images = torch.cat([images[0], images[1]], dim=0).cuda()
-            
-
-
-        #     features = model(images)
-        #     f1, f2 = torch.split(features, [bsz, bsz], dim=0)
-        #     features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
-            
-        #     loss = criterion(features)
-        #     losses.update(loss.item(), bsz)
-
-        #     # print(loss)
-        #     optimizer.zero_grad()
-        #     loss.backward(retain_graph=True)
-        #     optimizer.step()
