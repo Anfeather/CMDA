@@ -89,12 +89,7 @@ def ssl_with_CMA(
         # print("1",loss)
 
         cap_features = textmodel(caps)
-        # f1 = torch.nn.functional.normalize(f1,dim=1)
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # features_cross = torch.cat([f1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
-        # f1 = F.normalize(f1, dim=1)
-        # cap_features = F.normalize(cap_features, dim=1)
-        # loss_cross = criterion_MSE(f1, cap_features)
+
         features = torch.cat([f1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
         loss_cross = criterion(features)
         # print("A:",loss)
@@ -114,37 +109,6 @@ def ssl_with_CMA(
             progress.display(i)
 
 
-
-        # textmodel.train(), model.train()
-        # cap_features = textmodel(caps)
-        # f1 = model(image_single)
-        # # f1 = torch.nn.functional.normalize(f1,dim=1)
-        # # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # # features_cross = torch.cat([f1.unsqueeze(1), cap_features.unsqueeze(1)], dim=1)
-        # f1 = F.normalize(f1, dim=1)
-        # cap_features = F.normalize(cap_features, dim=1)
-
-        # loss_cross = criterion_CL(f1, cap_features)
-        # optimizer_cross.zero_grad()
-        # loss_cross.backward(retain_graph=True)
-        # optimizer_cross.step()
-        # cap_features = textmodel(caps)
-        # # f1_cap, f2_cap = torch.split(cap_features, [bsz, bsz], dim=0)
-
-        # If1 = torch.nn.functional.normalize(f1.clone().detach(),dim=1)
-        # If2 = torch.nn.functional.normalize(f2.clone().detach(),dim=1)
- 
-        # cap_features = torch.nn.functional.normalize(cap_features,dim=1)
-        # # cap_features = torch.cat([f1_cap.unsqueeze(1), f2_cap.unsqueeze(1)], dim=1)
-
-        # loss_cross_1 = criterion_MSE(If1,cap_features)
-        # loss_cross_2 = criterion_MSE(If2,cap_features)
-        # loss_cross = loss_cross_1 + loss_cross_2
-        # optimizer_text.zero_grad()
-        # loss_cross.backward(retain_graph=True)
-        # optimizer_text.step()
-        # if lr_scheduler:
-        #     lr_scheduler.step()
 
         
 
@@ -169,7 +133,7 @@ def ssl_with_CMA(
         # cor_matrix = F.cosine_similarity(z_i.unsqueeze(1), z_j.unsqueeze(0), dim=2)
         # cor_matrix = F.cosine_similarity(z_i, z_j, dim=1)
         cor_matrix = torch.abs(torch.mm( z_j, z_i.t() ))
-        # cor_matrix = cor_matrix - torch.diag( torch.diag(cor_matrix) )# + 10 * torch.eye(cor_matrix.shape[0]).cuda()
+        # cor_matrix = cor_matrix - torch.diag( torch.diag(cor_matrix) )# + 1 * torch.eye(cor_matrix.shape[0]).cuda()
 
         # cor_matrix = nn.Softmax(cor_matrix,dim=1)
         cor_matrix = cor_matrix / torch.sum(cor_matrix,dim=1)
